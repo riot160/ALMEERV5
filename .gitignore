@@ -1,0 +1,8 @@
+Path: .gitignore
+node_modules/
+session/
+.env
+*.log
+*.tmp
+downloads/
+temp/
