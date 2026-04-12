@@ -1,4 +1,4 @@
-import makeWASocket, {
+I'mimport makeWASocket, {
   useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore, getContentType, downloadContentFromMessage,
 } from '@whiskeysockets/baileys';
@@ -37,12 +37,12 @@ function printBanner() {
   console.log(chalk.cyan('  ═'.repeat(28)) + '\n');
 }
 
-// ── Status handler (RIOT2 exact pattern) ─────────────────────────────────────
+// ── Status handler ────────────────────────────────────────────────────────────
 async function statusHandler(sock, msg) {
   const sender = msg.key.participant || msg.key.remoteJid || '';
-  if (!sender) return;
-  const senderNum  = sender.split('@')[0];
-  const senderName = msg.pushName || senderNum;
+  if (!sender || sender === 'status@broadcast') return;
+
+  const senderName = msg.pushName || sender.split('@')[0];
   const hasImage   = !!msg.message?.imageMessage;
   const hasVideo   = !!msg.message?.videoMessage;
   const hasMedia   = hasImage || hasVideo;
@@ -53,37 +53,74 @@ async function statusHandler(sock, msg) {
     || msg.message?.conversation
     || msg.message?.extendedTextMessage?.text || null;
 
-  // Auto view — sendReadReceipt to sender JID (RIOT2 method)
+  // ── Auto view ─────────────────────────────────────────────────
   if (settings.autoViewStatus) {
     try {
+      // Primary method — sends read receipt to the status poster
       await sock.sendReadReceipt(sender, null, [msg.key.id]);
-      console.log(chalk.dim(`  👁️  Viewed: ${senderName}`));
+      console.log(chalk.dim(`  👁️  Viewed status: ${senderName}`));
     } catch {
-      await sock.readMessages([msg.key]).catch(() => {});
+      // Fallback method
+      try {
+        await sock.readMessages([{
+          remoteJid: 'status@broadcast',
+          id: msg.key.id,
+          participant: sender,
+        }]);
+        console.log(chalk.dim(`  👁️  Viewed status (fallback): ${senderName}`));
+      } catch (_) {}
     }
   }
 
-  // Auto react — key must have remoteJid: status@broadcast, sent to sender
+  // ── Auto react ────────────────────────────────────────────────
   if (settings.autoReactStatus) {
+    const emoji = settings.statusEmoji || '🔥';
     try {
+      // Method 1: sendMessage with react to sender
       await sock.sendMessage(sender, {
         react: {
-          text: settings.statusEmoji || '🔥',
-          key: { remoteJid: 'status@broadcast', id: msg.key.id, participant: sender, fromMe: false },
+          text:  emoji,
+          key: {
+            remoteJid:   'status@broadcast',
+            id:          msg.key.id,
+            participant: sender,
+            fromMe:      false,
+          },
         },
       });
-      console.log(chalk.dim(`  🔥  Reacted: ${senderName}`));
-    } catch (e) { console.log(chalk.dim(`  ⚠️  React failed: ${e.message}`)); }
+      console.log(chalk.dim(`  ${emoji}  Reacted: ${senderName}`));
+    } catch (e1) {
+      // Method 2: relayMessage (V4 plugin exact method)
+      try {
+        await sock.relayMessage('status@broadcast', {
+          reactionMessage: {
+            key: {
+              remoteJid:   'status@broadcast',
+              id:          msg.key.id,
+              participant: sender,
+              fromMe:      false,
+            },
+            text: emoji,
+          },
+        }, {
+          messageId:     msg.key.id,
+          statusJidList: [sender],
+        });
+        console.log(chalk.dim(`  ${emoji}  Reacted (relay): ${senderName}`));
+      } catch (e2) {
+        console.log(chalk.dim(`  ⚠️  React failed: ${e2.message}`));
+      }
+    }
   }
 
-  // Cache media for anti-delete status
+  // ── Cache for anti-delete status ──────────────────────────────
   if (settings.antiDeleteStatus && hasMedia) {
     try {
       const stream = await downloadContentFromMessage(msg.message[mediaKey], mediaType);
       const chunks = []; for await (const c of stream) chunks.push(c);
       statusCache.set(msg.key.id, {
         buf: Buffer.concat(chunks), mediaType, caption,
-        senderNum, senderName, time: Date.now(),
+        senderNum: sender.split('@')[0], senderName, time: Date.now(),
       });
       if (statusCache.size > 200) statusCache.delete(statusCache.keys().next().value);
     } catch (_) {}
