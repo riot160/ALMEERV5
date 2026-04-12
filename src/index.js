@@ -1,4 +1,4 @@
-I'mimport makeWASocket, {
+import makeWASocket, {
   useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore, getContentType, downloadContentFromMessage,
 } from '@whiskeysockets/baileys';
