@@ -190,3 +190,20 @@ export default [
     },
   },
 ];
+// ── statusdelay ───────────────────────────────────────────────
+  {
+    name: 'statusdelay', aliases: ['viewdelay'],
+    category: 'settings', ownerOnly: true,
+    description: 'Set delay (ms) before viewing status (e.g. 2000)',
+    async run({ m, args }) {
+      const val = parseInt(args[0]);
+      if (isNaN(val) || val < 0)
+        return m.reply(`Usage: ${config.PREFIX}statusdelay 2000\nCurrent: ${settings.statusDelay || 1000}ms`);
+      settings.statusDelay = val;
+      await m.reply(
+        `┏▣ ◈ *⏱️ STATUS DELAY* ◈\n` +
+        `┃ Delay set to: *${val}ms*\n` +
+        `┗▣`
+      );
+    },
+  },
